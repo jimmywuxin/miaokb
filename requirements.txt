@@ -1,0 +1,8 @@
+# miaokb 可选依赖
+# 核心功能（search/organize/relate/stats on .md/.txt files）不需要任何依赖
+# 只有需要解析 docx/pdf/xlsx 时才装
+
+# v0.2+
+python-docx>=1.0.0    # .docx 解析
+pypdf>=4.0.0          # .pdf 解析
+openpyxl>=3.1.0       # .xlsx 解析
