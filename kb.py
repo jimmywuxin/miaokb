@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 from collections import defaultdict, Counter
 
-DB_PATH = Path.home() / ".kb_demo" / "kb.db"
+DB_PATH = Path.home() / ".miaokb" / "kb.db"
 KB_ROOT = Path("/Volumes/mac mini outside/知识库")
 
 

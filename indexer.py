@@ -14,7 +14,7 @@ from collections import Counter
 
 # 知识库根目录
 KB_ROOT = Path("/Volumes/mac mini outside/知识库")
-INDEX_DIR = Path.home() / ".kb_demo"
+INDEX_DIR = Path.home() / ".miaokb"
 DB_PATH = INDEX_DIR / "kb.db"
 
 # 支持的文本文件类型
