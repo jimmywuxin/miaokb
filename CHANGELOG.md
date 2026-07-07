@@ -14,6 +14,23 @@
 - 接入 LLM 做语义搜索（MiniMax / DeepSeek / OpenAI 兼容）
 - 桌面 GUI（Tauri 套壳）
 
+## [0.2.0] - 2026-07-07
+
+### Added
+- 支持 `.docx` / `.pdf` / `.xlsx` 文件解析（`python-docx` / `pypdf` / `openpyxl`，均为可选依赖）
+- 索引文件类型从 2 种（`.md` / `.txt`）扩展到 5 种
+- `KB_ROOT` 支持环境变量（`KB_ROOT=/path`）或 CLI 参数（`python3 indexer.py /path`），跨平台不用改源码
+- 缺失可选依赖时静默跳过对应类型，不影响其他类型正常工作
+
+### Changed
+- `indexer.py` 的 `extract_text()` 重构为按扩展名分发到对应提取器
+- 模块顶部常量拆分为 `DEFAULT_KB_ROOT`（兜底值）+ `KB_ROOT`（运行时生效值）
+- 新增 `resolve_kb_root()` 函数封装路径解析优先级：env > CLI > default
+
+### Notes
+- 抽提成功率 100%（在 297 个文件 / 5 种类型上验证）
+- 黄金 query 排序不退化：「灵龟公园」/「政绩观 学习教育」均返回相关文件
+
 ## [0.1.0] - 2026-06-09
 
 ### 🎉 首次发布 (Demo 版)

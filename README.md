@@ -32,8 +32,17 @@ pip install -r requirements.txt
 ## 🎯 快速开始
 
 ```bash
-# 1. 构建索引（首次或内容更新后）
-python3 indexer.py /path/to/your/knowledge-base
+# 1. 构建索引（首次或内容更新后）。知识库路径 3 种方式任选：
+#
+#    a. 命令行参数（跨平台最直接）
+python3 indexer.py "/path/to/your/knowledge-base"
+#
+#    b. 环境变量（适合写进 shell rc / 计划任务）
+export KB_ROOT="/path/to/your/knowledge-base"    # macOS / Linux
+$env:KB_ROOT = "D:\knowledge-base"               # Windows PowerShell
+python3 indexer.py
+#
+#    c. 改 DEFAULT_KB_ROOT 常量（不推荐，每次切机器都得改源码）
 
 # 2. 搜索
 python3 kb.py search "七一活动 定向闯关"
@@ -49,6 +58,16 @@ python3 kb.py stats
 ```
 
 ## 📖 命令详解
+
+### `indexer.py` 接受路径的方式
+
+`KB_ROOT` 解析优先级：**环境变量 > CLI 参数 > DEFAULT_KB_ROOT**。
+
+| 平台 | 设置环境变量 | 命令行参数 |
+| --- | --- | --- |
+| macOS / Linux | `export KB_ROOT=/path/to/kb` | `python3 indexer.py /path/to/kb` |
+| Windows PowerShell | `$env:KB_ROOT = "D:\kb"` | `python3 indexer.py "D:\kb"` |
+| Windows CMD | `set KB_ROOT=D:\kb` | `python3 indexer.py D:\kb` |
 
 ### `kb.py stats`
 显示索引统计：文件数、词条数、词频总数、TOP 10 高频词。

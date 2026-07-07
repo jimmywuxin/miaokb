@@ -14,12 +14,17 @@
 - **已完成**：核心 CLI（search / organize / relate / stats）+ SQLite 倒排索引
 - **未做**：GUI、LLM 集成、docx/pdf 解析（已在 roadmap）
 - **代码量**：~250 行 Python
+- **版本**：v0.2.0（文件类型扩展阶段）
+- **已完成**：核心 CLI（search / organize / relate / stats）+ SQLite 倒排索引 + docx/pdf/xlsx 解析 + KB_ROOT 参数化
+- **未做**：GUI、LLM 集成、增量索引、配置文件（已在 roadmap）
+- **代码量**：~420 行 Python
 
 ## 技术栈
 
 - **语言**：Python 3.9+（测试过 3.9 / 3.11）
 - **核心依赖**：**零**（只用标准库）
 - **可选依赖**：`python-docx` / `pypdf` / `openpyxl`（v0.2 计划加入）
+- **可选依赖状态**：v0.2 已加入 `requirements.txt`，惰性注册，未装不影响其他类型
 - **存储**：SQLite（标准库 `sqlite3`）
 - **跨平台**：macOS / Windows / Linux
 
@@ -70,6 +75,7 @@ miaokb/
 - 类型注解：核心函数都加，参数类型和返回类型
 - 注释：中文（用户偏好），简短
 - 字符串：`"双引号"` 主用，docstring 用三引号
+- PEP 604 联合类型（`Path | None`）只在 `from __future__ import annotations` 下用，3.9 兼容
 
 ### 文件命名
 - 入口文件 `kb.py`（CLI 短名）
@@ -85,6 +91,7 @@ miaokb/
 - 文件读取失败：`errors="ignore"` 静默跳过，不中断整个索引过程
 - 索引不存在：CLI 入口给友好提示「先跑 python3 indexer.py」
 - query 无效：直接提示，不抛异常
+- 可选依赖缺失：`try / except ImportError` 静默跳过对应文件类型
 
 ## 任务执行清单
 
@@ -132,6 +139,9 @@ tests/
 ```bash
 # 1. 重建索引
 python3 indexer.py /Volumes/mac\ mini\ outside/知识库
+# 1. 重建索引（任选一种）
+python3 indexer.py "/Volumes/mac mini outside/知识库"   # macOS / Linux
+KB_ROOT="D:\知识库" python3 indexer.py                  # Windows PowerShell 用 $env:KB_ROOT
 
 # 2. 跑核心 4 个命令
 python3 kb.py stats
