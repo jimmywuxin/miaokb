@@ -2,6 +2,8 @@
 
 > miaokb 接下来要做的事。按优先级排，每阶段独立可用。
 
+> **文档关系**：`ROADMAP.md` 是阶段规划（版本 + 优先级），`CHANGELOG.md` 是细颗粒度的近期待办列表（`[Unreleased]` 段）。新需求先在 ROADMAP 找到归属阶段，落地时进 CHANGELOG `[Unreleased]`，发版时汇总到 `[x.y.z]`，避免两边漂移。
+
 ## 已完成
 
 - [x] **v0.1.0**（2026-06-09）— Demo 版
@@ -11,54 +13,66 @@
   - [x] 用户手动验证：3 个核心痛点（找/整/联）demo 准
   - [x] 7 个项目文档（README/CHANGELOG/LICENSE/AGENTS/架构/路线图）
   - [x] GitHub repo 建立
+  - [x] **v0.2.0**（2026-07-07）— 文件类型扩展（docx / pdf / xlsx + KB_ROOT 参数化）
+  - [x] **v0.2.1**（2026-07-08）— 增量索引（path+mtime+hash 4 类 diff）+ organize 根目录白名单
 
 ---
 
-## v0.2 — 文件类型覆盖（1-2 周）
+## v0.2 — 文件类型覆盖（已全量完成）
 
 **目标**：从「97 个 md」覆盖到「全部 270 个文件」。
 
+**状态**：v0.2.0（类型扩展）+ v0.2.1（增量索引 + 白名单）完成，详见 CHANGELOG。「organize 按时间聚类」评估后价值偏低，已挪到 v0.3 改进尾部。
+
 ### 必做
-- [ ] `.docx` 解析（`python-docx`）
-- [ ] `.pdf` 解析（`pypdf`）
-- [ ] `.xlsx` 解析（`openpyxl`）
-- [ ] `requirements.txt` 正式发布
-- [ ] 增量索引（按 mtime 跳过未变文件）
+- [x] `.docx` 解析（`python-docx`）
+- [x] `.pdf` 解析（`pypdf`）
+- [x] `.xlsx` 解析（`openpyxl`）
+- [x] `requirements.txt` 正式发布
+- [x] 增量索引（按 mtime 跳过未变文件）
 
 ### 改进
-- [ ] `organize` 加白名单（`索引.md` / `项目笔记-模板.md` 不再误报）
-- [ ] `organize` 按时间聚类（找「2025年」「2026年」开头的系列文件）
-- [ ] 跨平台路径处理（`pathlib.Path` 替代字符串拼接）
+- [x] `organize` 加白名单（`索引.md` / `项目笔记-模板.md` 不再误报）
+- [x] 跨平台路径处理（`pathlib.Path` 替代字符串拼接）
 
 ### 验收
-- 索引覆盖 270 个文件
-- `search` 能搜到 docx 内容
-- 增量重建 < 5 秒
+- ✅ 索引覆盖 270 个文件
+- ✅ `search` 能搜到 docx 内容
+- ✅ 增量重建 < 5 秒
 
 ---
 
-## v0.3 — 测试 + TF-IDF（2-3 周）
+## v0.3 — 测试 + 配置文件（2-3 周）
 
 **目标**：代码质量 + 搜索精度。
 
+**v0.3 优先级排序**（必做内按这顺序推进，做完 #1 才有意义动 #2）：
+
+1. `tests/test_tokenize.py` — 防切词逻辑回退，半小时搞定但挡住所有未来 silent bug
+2. `tests/test_search.py` — 黄金 query fixture，验证 indexer 增量逻辑（v0.2.1 新增）不退化
+3. 其余 test + 配置文件 + 改进项
+
 ### 必做
-- [ ] `tests/test_tokenize.py`（切词单元测试）
-- [ ] `tests/test_search.py`（黄金 query fixture）
+- [ ] `tests/test_tokenize.py`（切词单元测试）— **#1 必须先做**
+- [ ] `tests/test_search.py`（黄金 query fixture）— **#2 必须先做**
 - [ ] `tests/test_organize.py`（4 条规则覆盖）
 - [ ] `tests/test_relate.py`（关联准确性）
-- [ ] TF-IDF 评分替换 TF（按文件数加 IDF 权重）
+- [ ] TF-IDF 评分替换 TF — **触发条件**：数据量 > 1000 文件且搜索质量明显退化才做；当前 297 文件 TF 已足够
 
 ### 改进
-- [ ] 配置文件 `~/.miaokb/config.toml`
+- [ ] 配置文件 `~/.miaokb/config.toml` — **优先级 #3**，解决 KB_ROOT 每次命令行传的痛点
   - 自定义停用词
   - 忽略目录（`.git`, `node_modules` 等）
   - 知识库路径（避免每次命令行传）
+- [ ] `organize` 按时间聚类（从 v0.2 改进段挪来，价值中等，做完基本无回退风险）
 - [ ] 跨平台安装脚本
   - macOS / Linux: `install.sh`
   - Windows: `install.bat` / `install.ps1`
 - [ ] 错误处理：文件锁、编码错误、权限问题
 
 ### 验收
+- ✅ `test_tokenize` + `test_search` 上线并通过 CI
+- ✅ `git push` 触发自动跑测试，黄金 query 排序稳定不漂移
 - 测试覆盖率 > 80%
 - 「政绩观 学习教育」排序变化（应该汇报 > 大纲 > 党课材料 不变，但分数更合理）
 
@@ -67,6 +81,13 @@
 ## v0.4 — LLM 增强（1-2 个月）
 
 **目标**：从「关键词匹配」升级到「真语义」。
+
+### 启动条件
+
+v0.4 不在「画饼」阶段才做，必须以下两条都满足才开 v0.4 启动分支：
+
+- v0.3 测试套件至少 `test_tokenize.py` + `test_search.py` 上线并通过 CI（否则改了 search 没法回归）
+- v0.3 配置文件 `~/.miaokb/config.toml` 已实现（LLM 的 API key / base_url 强依赖它）
 
 ### 必做
 - [ ] LLM 客户端封装 `llm.py`
