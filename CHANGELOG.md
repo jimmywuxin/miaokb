@@ -9,10 +9,27 @@
 
 ### 计划中
 - 跨平台一键安装脚本（`install.sh` / `install.bat`）
-- 自动检测新增/修改/删除文件，增量更新索引
 - 配置文件（自定义停用词、知识库路径、忽略规则）
 - 接入 LLM 做语义搜索（MiniMax / DeepSeek / OpenAI 兼容）
 - 桌面 GUI（Tauri 套壳）
+
+## [0.2.1] - 2026-07-08
+
+### Added
+- `organize` 规则 2 「根目录散落」新增白名单 `ROOT_WHITELIST`，默认屏蔽 `索引.md` / `项目笔记-模板.md` / `README.md`，不再误报
+
+### Changed
+- **`indexer.py` 改为增量索引**：对比上一轮的快照（path → mtime + content_hash）和这一轮 rglob 结果，只处理变化的 4 类：
+  - mtime 一致 → fast path 跳过（连 hash 都不用算）
+  - mtime 变了但 hash 没变（被 touch）→ 仅更新 mtime
+  - 真改了 / 新增了 → 重抽内容 + 重写 terms
+  - 老有、这轮没扫到 → 删除 files + terms 行
+- `files` / `terms` 表 schema 不变，向后兼容，老 db 直接继承可用
+
+### Notes
+- 首次跑（空 db）走相同代码路径，老快照为空 = 全部走 INSERT，等价全量重建
+- 输出报告从「文本文件: N」改为 `新增 N 修改 N 删除 N 跳过 N` + 首次 / 增量标签 + 耗时（秒）
+- 已验证黄金 query「灵龟公园」/「政绩观 学习教育」排序不退化
 
 ## [0.2.0] - 2026-07-07
 

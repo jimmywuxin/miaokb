@@ -16,6 +16,10 @@ from collections import defaultdict, Counter
 DB_PATH = Path.home() / ".miaokb" / "kb.db"
 KB_ROOT = Path("/Volumes/mac mini outside/知识库")
 
+# 根目录允许保留的「故意散落」文件,organize 规则 2 不报它们
+# 加白名单时把文件名直接列进来,精确匹配(不要用 glob,够用且可预测)
+ROOT_WHITELIST = {"索引.md", "项目笔记-模板.md", "README.md"}
+
 
 def conn():
     if not DB_PATH.exists():
@@ -119,9 +123,11 @@ def cmd_organize(path: str = ""):
     else:
         print("【多版本文件】无明显多版本\n")
 
-    # 规则 2: 根目录散落文件（不分类）
+    # 规则 2: 根目录散落文件(不分类)。白名单里的文件是故意保留的,不报。
     cur.execute("SELECT rel_path, size, mtime FROM files WHERE rel_path NOT LIKE '%/%'")
     root_files = cur.fetchall()
+    root_files = [(rel, size, mtime) for rel, size, mtime in root_files
+                  if Path(rel).name not in ROOT_WHITELIST]
     if root_files:
         print(f"【根目录散落】{len(root_files)} 个文件未归类：\n")
         for rel, size, mtime in root_files:

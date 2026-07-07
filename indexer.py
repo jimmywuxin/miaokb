@@ -161,15 +161,25 @@ def file_hash(content: str) -> str:
 
 
 def build_index(root=None) -> dict:
-    """扫一遍知识库，写入 SQLite。root 默认用 KB_ROOT 全局变量。"""
+    """增量建索引：对比老快照与这一轮 rglob 结果，只处理有变化的文件。
+
+    - mtime 一致 → fast path 跳过(连 hash 都不用算)
+    - mtime 变了但 hash 没变(被 touch)→ 仅更新 mtime,沿用旧 terms
+    - 真改了/新增了 → 重抽内容+重写该文件的 terms
+    - 老有、新没有 → 删除对应 files + terms
+
+    首次跑(db 为空)老快照为空,所有文件走 INSERT 分支,等价全量重建。
+    """
+    import time
     if root is None:
         root = KB_ROOT
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    # 幂等创建表,不再 DROP —— v0.2.1 起走增量
     conn.executescript("""
-        DROP TABLE IF EXISTS files;
-        DROP TABLE IF EXISTS terms;
-        CREATE TABLE files (
+        CREATE TABLE IF NOT EXISTS files (
             id INTEGER PRIMARY KEY,
             path TEXT UNIQUE,
             rel_path TEXT,
@@ -179,56 +189,83 @@ def build_index(root=None) -> dict:
             token_count INTEGER,
             summary TEXT
         );
-        CREATE TABLE terms (
+        CREATE TABLE IF NOT EXISTS terms (
             term TEXT,
             file_id INTEGER,
             freq INTEGER,
             PRIMARY KEY (term, file_id)
         );
-        CREATE INDEX idx_terms_term ON terms(term);
+        CREATE INDEX IF NOT EXISTS idx_terms_term ON terms(term);
     """)
-    cur = conn.cursor()
 
-    file_count = 0
-    skipped_count = 0
+    # 老快照:path -> (file_id, mtime, content_hash)
+    cur.execute("SELECT id, path, mtime, content_hash FROM files")
+    old_index = {p: (fid, m, h) for fid, p, m, h in cur.fetchall()}
+
+    t0 = time.perf_counter()
+    new_paths = set()
+    stats = {"added": 0, "modified": 0, "deleted": 0, "skipped": 0, "unsupported": 0}
+
     for path in root.rglob("*"):
         if not path.is_file():
             continue
         if any(part.startswith(".") for part in path.parts):
             continue
-        if path.suffix.lower() not in SUPPORTED_EXT:
-            skipped_count += 1
+        ext = path.suffix.lower()
+        if ext not in SUPPORTED_EXT:
+            stats["unsupported"] += 1
             continue
 
+        path_str = str(path)
+        new_paths.add(path_str)
+        stat = path.stat()
+        mtime_str = datetime.fromtimestamp(stat.st_mtime).isoformat()
+
+        # fast path: mtime 一致 → 零成本跳过
+        if path_str in old_index and old_index[path_str][1] == mtime_str:
+            stats["skipped"] += 1
+            continue
+
+        # mtime 变了 → 抽内容、算 hash
         content = extract_text(path)
         if not content.strip():
             continue
 
-        # 内容 + 文件名一起索引（文件名常常是关键线索）
         full_text = path.name + "\n" + content
         tokens = tokenize(full_text)
         if not tokens:
             continue
 
-        # 文件级摘要：取前 200 字符
+        h = file_hash(content)
+        # hash 没变(被 touch 但内容没变) → 仅更新 mtime 即可
+        if path_str in old_index and old_index[path_str][2] == h:
+            fid = old_index[path_str][0]
+            cur.execute("UPDATE files SET mtime=? WHERE id=?", (mtime_str, fid))
+            stats["skipped"] += 1
+            continue
+
         summary = re.sub(r"\s+", " ", content)[:200].strip()
+        rel_path = str(path.relative_to(root))
 
-        cur.execute(
-            "INSERT INTO files (path, rel_path, size, mtime, content_hash, token_count, summary) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                str(path),
-                str(path.relative_to(root)),
-                path.stat().st_size,
-                datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
-                file_hash(content),
-                len(tokens),
-                summary,
-            ),
-        )
-        file_id = cur.lastrowid
+        # UPSERT:已有就更新,没有就插入
+        cur.execute("SELECT id FROM files WHERE path=?", (path_str,))
+        row = cur.fetchone()
+        if row:
+            file_id = row[0]
+            cur.execute(
+                "UPDATE files SET rel_path=?, size=?, mtime=?, content_hash=?, token_count=?, summary=? WHERE id=?",
+                (rel_path, stat.st_size, mtime_str, h, len(tokens), summary, file_id),
+            )
+        else:
+            cur.execute(
+                "INSERT INTO files (path, rel_path, size, mtime, content_hash, token_count, summary) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (path_str, rel_path, stat.st_size, mtime_str, h, len(tokens), summary),
+            )
+            file_id = cur.lastrowid
 
-        # 词频
+        # 清旧 terms,写新
+        cur.execute("DELETE FROM terms WHERE file_id=?", (file_id,))
         freq = Counter(tokens)
         # 过滤停用词 + 太低频（仅出现 1 次的扔掉省空间）
         STOP = {
@@ -244,24 +281,34 @@ def build_index(root=None) -> dict:
                 (term, file_id, f),
             )
 
-        file_count += 1
+        if path_str in old_index:
+            stats["modified"] += 1
+        else:
+            stats["added"] += 1
+
+    # 删除检测:老有、这一轮没扫到的(改名/移走/真删了)
+    for p in set(old_index.keys()) - new_paths:
+        fid = old_index[p][0]
+        cur.execute("DELETE FROM terms WHERE file_id=?", (fid,))
+        cur.execute("DELETE FROM files WHERE id=?", (fid,))
+        stats["deleted"] += 1
 
     conn.commit()
     conn.close()
-    return {
-        "files": file_count,
-        "skipped": skipped_count,
-        "supported": sorted(SUPPORTED_EXT),
-        "db": str(DB_PATH),
-    }
+    stats["elapsed_s"] = round(time.perf_counter() - t0, 2)
+    stats["is_first_run"] = len(old_index) == 0
+    return stats
 
 
 if __name__ == "__main__":
     KB_ROOT = resolve_kb_root()
     print(f"开始索引…  知识库: {KB_ROOT}")
     result = build_index()
-    print(f"✅ 索引完成")
-    print(f"   文本文件: {result['files']}")
-    print(f"   跳过(非 md/txt): {result['skipped']}")
-    print(f"   支持的类型: {' '.join(result['supported'])}")
-    print(f"   索引位置: {result['db']}")
+    label = "首次全量" if result["is_first_run"] else "增量"
+    print(f"✅ 索引完成({label} {result['elapsed_s']}s)")
+    print(
+        f"   新增: {result['added']}  修改: {result['modified']}  "
+        f"删除: {result['deleted']}  跳过: {result['skipped']}"
+    )
+    print(f"   不支持类型跳过: {result['unsupported']}")
+    print(f"   索引位置: {DB_PATH}")
